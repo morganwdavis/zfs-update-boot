@@ -101,12 +101,24 @@ update_efi_boot() {
 
 		echo "Unmounting /mnt"
 		umount /mnt
+	else
+		echo
+		echo "Unable to mount $dev_path to check it (maybe not yet MSDOS formatted)."
+		echo "Continuing to try to format it for MSDOS..."
+		echo
+	fi
+
+	echo "Making a new MSDOS filesystem on $dev_path"
+	newfs_msdos -F 32 -c 1 "$dev_path"
+	if [ $? -ne 0 ]; then
+		echo
+		echo "Unable to mount and/or format $dev_path"
+		echo
+		echo "YOU MIGHT NEED TO BOOT INTO SINGLE USER MODE TO DO THIS."
+		return
 	fi
 
 	set -e # Exit if any command fails.
-
-	echo "Making a new MSDOS filesystem on $dev_path"
-	newfs_msdos -F 32 -c 1 "$dev_path" || return
 
 	echo "Mounting $dev_path on /mnt"
 	mount -t msdosfs -o longnames "$dev_path" /mnt
@@ -156,26 +168,26 @@ for dev_name in $gpt_devices; do
 	gpart show "$dev_name"
 
 	# Check for ZFS partition
-	zfs_partition=$(gpart show "$dev_name" | grep 'freebsd-zfs' | awk '{print $3}')
+	zfs_partition=$(gpart show "$dev_name" | grep ' freebsd-zfs ' | awk '{print $3}')
 	if [ -z "$zfs_partition" ]; then
-		echo "No ZFS partition found on $dev_name. Skipping."
+		echo "No 'freebsd-zfs' labeled partition found on $dev_name. Skipping."
 		continue
 	fi
 
 	# Check for legacy freebsd-boot partition
-	boot_partition=$(gpart show "$dev_name" | grep 'freebsd-boot' | awk '{print $3}')
+	boot_partition=$(gpart show "$dev_name" | grep ' freebsd-boot ' | awk '{print $3}')
 	if [ -n "$boot_partition" ]; then
 		update_gpt_boot "$dev_name" "$boot_partition"
 	fi
 
 	# Check for EFI partition
-	efi_partition=$(gpart show "$dev_name" | grep 'efi' | awk '{print $3}')
+	efi_partition=$(gpart show "$dev_name" | grep ' efi ' | awk '{print $3}')
 	if [ -n "$efi_partition" ]; then
 		update_efi_boot "$dev_name" "$efi_partition"
 	fi
 
 	if [ -z "$efi_partition" ] && [ -z "$boot_partition" ]; then
-		echo "No EFI or freebsd-boot partition found on $dev_name."
+		echo "No 'efi' or 'freebsd-boot' labeled partition found on $dev_name."
 	fi
 done
 
